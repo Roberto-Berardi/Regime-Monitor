@@ -1,0 +1,24 @@
+# Data handling
+pandas>=2.2
+numpy>=1.26
+
+# Numerical & stats
+scipy>=1.13
+statsmodels>=0.14
+
+# Data sources
+yfinance>=0.2.40
+pandas-datareader>=0.10
+
+# Plotting
+matplotlib>=3.8
+plotly>=5.20
+
+# GARCH models
+arch>=6.3
+
+# Web app
+streamlit>=1.35
+
+# Data cache format
+pyarrow>=15.0

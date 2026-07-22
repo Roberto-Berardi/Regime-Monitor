@@ -1,0 +1,91 @@
+"""
+Central configuration for the Cross-Asset Regime Monitor.
+
+Every assumption lives here. If a PM asks "why?", the answer is one line in
+this file. Do not hardcode constants elsewhere.
+"""
+
+# ---------------------------------------------------------------------------
+# 1. ASSET UNIVERSE
+# ---------------------------------------------------------------------------
+# 9 assets from EMiF Project 2. Yahoo Finance tickers.
+# Bonds are represented via yields (from FRED) later converted to return
+# proxies via modified duration in src/returns.py.
+ASSETS = {
+    "SP500":       "^GSPC",     # S&P 500 index
+    "EuroStoxx50": "^STOXX50E", # Euro Stoxx 50
+    "MSCI_EM":     "EEM",       # iShares MSCI EM ETF (proxy)
+    "Gold":        "GC=F",      # Gold futures
+    "Oil_WTI":     "CL=F",      # WTI crude oil futures
+    "US_IG":       "LQD",       # iShares IG corporate bond ETF (proxy)
+    "US_HY":       "HYG",       # iShares HY corporate bond ETF (proxy)
+}
+
+# Bonds via yields from FRED (converted to returns in src/returns.py).
+FRED_SERIES = {
+    "US_2Y":       "DGS2",      # US 2-Year Treasury yield
+    "US_10Y":      "DGS10",     # US 10-Year Treasury yield
+    "HY_SPREAD":   "BAMLH0A0HYM2",  # ICE BofA US High Yield OAS
+    "IG_SPREAD":   "BAMLC0A0CM",    # ICE BofA US Corporate IG OAS
+}
+
+# Modified durations for yield-to-return conversion (approximate, in years).
+# ret ~= -duration * change_in_yield
+DURATIONS = {
+    "US_2Y":  1.9,
+    "US_10Y": 8.5,
+}
+
+# ---------------------------------------------------------------------------
+# 2. SAMPLE PERIOD
+# ---------------------------------------------------------------------------
+START_DATE = "2005-01-01"
+
+# ---------------------------------------------------------------------------
+# 3. GARCH MODEL
+# ---------------------------------------------------------------------------
+GARCH_SPEC = {
+    "vol":  "GARCH",   # GARCH(1,1)
+    "p":    1,
+    "q":    1,
+    "dist": "t",       # Student-t innovations (fat tails)
+}
+EWMA_LAMBDA = 0.94     # RiskMetrics-standard fallback if GARCH fails
+
+# ---------------------------------------------------------------------------
+# 4. DCC PARAMETERS
+# ---------------------------------------------------------------------------
+# Fixed per course convention (Engle 2002 finds these values typical).
+# Optionally re-estimated by QMLE in Phase 4 (P8) as a robustness check.
+DCC_A = 0.05
+DCC_B = 0.93
+
+# ---------------------------------------------------------------------------
+# 5. MOMENTUM SIGNAL
+# ---------------------------------------------------------------------------
+# 12-1 month time-series momentum (Moskowitz-Ooi-Pedersen 2012).
+MOM_LOOKBACK_DAYS = 252    # ~12 months of trading days
+MOM_SKIP_DAYS     = 21     # skip most recent month to avoid short-term reversal
+MA_WINDOW_DAYS    = 200    # confirmation filter: 200-day MA
+
+# ---------------------------------------------------------------------------
+# 6. TILT AND REGIME GATE
+# ---------------------------------------------------------------------------
+TILT_CAP_PP        = 4     # max +/- percentage points around ERC weight
+REGIME_THRESHOLD   = 0.70  # P(high-corr regime) above which tilt is halved
+REGIME_HALVING     = 0.5   # scaling factor applied when gate is triggered
+
+# ---------------------------------------------------------------------------
+# 7. BACKTEST
+# ---------------------------------------------------------------------------
+TX_COST_BPS        = 5     # one-way transaction cost in basis points
+TX_COST_BPS_STRESS = 10    # stress test scenario
+REBAL_FREQ         = "W-FRI"  # weekly on Fridays (pandas offset alias)
+
+# ---------------------------------------------------------------------------
+# 8. PATHS
+# ---------------------------------------------------------------------------
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).parent
+DATA_DIR     = PROJECT_ROOT / "data"
+CACHE_FILE   = DATA_DIR / "prices_cache.parquet"

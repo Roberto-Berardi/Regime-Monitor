@@ -22,11 +22,26 @@ ASSETS = {
 }
 
 # Bonds via yields from FRED (converted to returns in src/returns.py).
+# Two categories of FRED series.
+# ------------------------------
+# CURRENT: recent values for dashboard KPIs. ICE BofA OAS series are the
+# institutional standard, but FRED restricted them to a rolling 3-year
+# window in April 2026 (licensing change with ICE Data Indices).
+# HISTORY: Fed-computed Moody's spreads, freely available since 1986/1953,
+# used for long-history context charts and any regime work that needs
+# pre-2023 credit data.
 FRED_SERIES = {
-    "US_2Y":       "DGS2",      # US 2-Year Treasury yield
-    "US_10Y":      "DGS10",     # US 10-Year Treasury yield
-    "HY_SPREAD":   "BAMLH0A0HYM2",  # ICE BofA US High Yield OAS
-    "IG_SPREAD":   "BAMLC0A0CM",    # ICE BofA US Corporate IG OAS
+    # Rates
+    "US_2Y":       "DGS2",       # 2-Year Treasury constant maturity, since 1976
+    "US_10Y":      "DGS10",      # 10-Year Treasury constant maturity, since 1962
+
+    # Credit spreads - CURRENT (ICE BofA, rolling 3-year window since Apr 2026)
+    "HY_SPREAD":   "BAMLH0A0HYM2",   # ICE BofA US HY OAS, daily
+    "IG_SPREAD":   "BAMLC0A0CM",     # ICE BofA US IG OAS, daily
+
+    # Credit spreads - HISTORY (Moody's, Fed-computed, long history)
+    "BAA_SPREAD":  "BAA10Y",     # Moody's Baa - 10Y Treasury, daily since 1986
+    "AAA_SPREAD":  "AAA10Y",     # Moody's Aaa - 10Y Treasury, daily since 1986
 }
 
 # Modified durations for yield-to-return conversion (approximate, in years).

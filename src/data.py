@@ -290,3 +290,180 @@ def fetch_all(start: str = None) -> pd.DataFrame:
     print(f"  columns:  {list(df.columns)}")
 
     return df
+
+# =============================================================================
+# 5. CACHE, VALIDATION, GRACEFUL FALLBACK
+# =============================================================================
+# The rule: get_data() NEVER raises. If fresh download fails validation,
+# we return the last-good cache. If nothing works, we return an empty
+# DataFrame and log why - the app renders "data unavailable" but stays alive.
+
+from datetime import datetime, timezone
+import json
+
+
+def save_cache(df: pd.DataFrame) -> None:
+    """
+    Save the panel to a parquet file with a JSON sidecar holding the timestamp.
+    """
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    df.to_parquet(config.CACHE_FILE)
+
+    meta = {
+        "saved_utc":   datetime.now(timezone.utc).isoformat(),
+        "rows":        int(df.shape[0]),
+        "cols":        int(df.shape[1]),
+        "min_date":    str(df.index.min().date()),
+        "max_date":    str(df.index.max().date()),
+        "columns":     list(df.columns),
+    }
+    meta_file = config.CACHE_FILE.with_suffix(".json")
+    meta_file.write_text(json.dumps(meta, indent=2))
+
+    print(f"[save_cache] wrote {config.CACHE_FILE.name}: "
+          f"{df.shape[0]} rows, latest {df.index.max().date()}")
+
+
+def load_cache() -> tuple[pd.DataFrame, dict]:
+    """
+    Load the cached panel and its metadata. Returns (empty df, empty dict)
+    if no cache exists.
+    """
+    if not config.CACHE_FILE.exists():
+        print("[load_cache] no cache file found")
+        return pd.DataFrame(), {}
+
+    df = pd.read_parquet(config.CACHE_FILE)
+
+    meta_file = config.CACHE_FILE.with_suffix(".json")
+    meta = json.loads(meta_file.read_text()) if meta_file.exists() else {}
+
+    print(f"[load_cache] loaded {df.shape[0]} rows, "
+          f"saved {meta.get('saved_utc', 'unknown')}")
+    return df, meta
+
+
+def validate(df: pd.DataFrame) -> tuple[bool, list[str]]:
+    """
+    Sanity checks. All must pass or we reject the panel and keep the cache.
+    Returns (passed, list_of_issues).
+    """
+    issues = []
+
+    if df.empty:
+        issues.append("panel is empty")
+        return False, issues
+
+    # (a) at least 8 of 9 core columns present
+    #     (SP500, EuroStoxx50, MSCI_EM, Gold, Oil_WTI, US_IG, US_HY, US_2Y, US_10Y)
+    core_cols = list(config.ASSETS.keys()) + list(config.DURATIONS.keys())
+    present = sum(c in df.columns for c in core_cols)
+    if present < 8:
+        issues.append(f"only {present} of {len(core_cols)} core columns present")
+
+    # (b) no core column entirely NaN
+    for col in core_cols:
+        if col in df.columns and df[col].isna().all():
+            issues.append(f"{col} is entirely NaN")
+
+    # (c) most recent date within 5 business days of today
+    latest = df.index.max()
+    days_stale = pd.bdate_range(latest, pd.Timestamp.today()).size - 1
+    if days_stale > 5:
+        issues.append(f"latest data is {days_stale} business days old ({latest.date()})")
+
+    # (d) ticker-glitch detector: check ONLY the most recent 30 business days.
+    #     Rationale: historical extreme events (e.g., WTI going negative on
+    #     2020-04-20 during COVID) are real and should not invalidate the
+    #     panel. A live ticker glitch, by contrast, would appear in the
+    #     most recent data. Also skip through zero-crossings (pct_change is
+    #     mathematically meaningless when a series crosses zero).
+    RECENT_WINDOW_DAYS = 30
+    GLITCH_THRESHOLD   = 0.25
+
+    for col in config.ASSETS:
+        if col not in df.columns:
+            continue
+        s = df[col].dropna().tail(RECENT_WINDOW_DAYS)
+        if len(s) < 2:
+            continue
+        # skip pairs where the series changes sign (log-return ill-defined)
+        prev = s.shift(1)
+        same_sign = (s * prev) > 0
+        if not same_sign.any():
+            continue
+        # only compute returns on same-sign consecutive pairs
+        rets = (s[same_sign] / prev[same_sign] - 1).abs()
+        if len(rets) == 0:
+            continue
+        max_move = rets.max()
+        if max_move > GLITCH_THRESHOLD:
+            worst_date = rets.idxmax().date()
+            issues.append(
+                f"{col} moved {max_move:.1%} on {worst_date} "
+                f"(within last {RECENT_WINDOW_DAYS} days) - possible ticker glitch"
+            )
+
+    passed = len(issues) == 0
+    if passed:
+        print("[validate] all checks passed")
+    else:
+        print("[validate] FAILED:")
+        for i in issues:
+            print(f"    - {i}")
+
+    return passed, issues
+
+
+def get_data(force_refresh: bool = False) -> tuple[pd.DataFrame, dict]:
+    """
+    Master entry point. Try fresh download, validate, then EITHER save fresh
+    OR fall back to cache. This function NEVER raises.
+
+    Parameters
+    ----------
+    force_refresh : bool
+        If True, skip the cache-load-on-failure step (used in tests).
+
+    Returns
+    -------
+    (df, meta) : DataFrame + metadata dict.
+        meta contains 'source' key: "fresh" or "cache" or "empty".
+    """
+    print("\n" + "="*70)
+    print("[get_data] attempting fresh download")
+    print("="*70)
+
+    try:
+        fresh = fetch_all()
+    except Exception as e:
+        print(f"[get_data] fresh download raised: {e}")
+        fresh = pd.DataFrame()
+
+    passed, issues = validate(fresh)
+
+    if passed:
+        save_cache(fresh)
+        meta = {
+            "source":    "fresh",
+            "saved_utc": datetime.now(timezone.utc).isoformat(),
+            "issues":    [],
+        }
+        return fresh, meta
+
+    print("[get_data] fresh data rejected, attempting cache fallback")
+
+    if force_refresh:
+        print("[get_data] force_refresh=True, not loading cache")
+        return pd.DataFrame(), {"source": "empty", "issues": issues}
+
+    cached, cache_meta = load_cache()
+    if cached.empty:
+        print("[get_data] no cache available either - returning empty")
+        return pd.DataFrame(), {"source": "empty", "issues": issues}
+
+    print(f"[get_data] serving cache from {cache_meta.get('saved_utc', 'unknown')}")
+    cache_meta["source"] = "cache"
+    cache_meta["issues"] = issues
+    return cached, cache_meta

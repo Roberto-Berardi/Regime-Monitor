@@ -362,3 +362,74 @@ def reconcile_garch_vs_project2(summary: pd.DataFrame) -> pd.DataFrame:
             "verdict":       verdict,
         })
     return pd.DataFrame(rows)
+
+# =============================================================================
+# 5. LJUNG-BOX DIAGNOSTICS ON STANDARDISED RESIDUALS
+# =============================================================================
+from statsmodels.stats.diagnostic import acorr_ljungbox
+
+
+def ljungbox_diagnostics(fits: dict, lags: tuple = (5, 10)) -> pd.DataFrame:
+    """
+    Post-GARCH Ljung-Box test on standardised residuals and squared residuals.
+
+    Interpretation:
+    - Test on z_t   : are the residuals autocorrelated after subtracting the mean?
+                      Failure would suggest the mean model needs AR terms.
+    - Test on z_t^2 : is there ARCH effect LEFT after GARCH filtering?
+                      Failure means GARCH did not fully capture vol clustering.
+                      This is the more diagnostic of the two.
+
+    We report p-values at the requested lags; PASS if all p-values > 0.05.
+    """
+    rows = []
+    for asset, fit in fits.items():
+        if fit["method"] == "EWMA-fallback" or fit["std_resid"] is None:
+            rows.append({
+                "asset":       asset,
+                "method":      fit["method"],
+                "LB_z_lag5":   "  n/a",
+                "LB_z_lag10":  "  n/a",
+                "LB_z2_lag5":  "  n/a",
+                "LB_z2_lag10": "  n/a",
+                "verdict":     "skipped (EWMA)",
+            })
+            continue
+
+        z = fit["std_resid"].dropna()
+        if len(z) < 100:
+            rows.append({"asset": asset, "verdict": "too short"})
+            continue
+
+        lb_z  = acorr_ljungbox(z,     lags=list(lags), return_df=True)
+        lb_z2 = acorr_ljungbox(z ** 2, lags=list(lags), return_df=True)
+
+        p_z_5   = lb_z.loc[lags[0], "lb_pvalue"]
+        p_z_10  = lb_z.loc[lags[1], "lb_pvalue"]
+        p_z2_5  = lb_z2.loc[lags[0], "lb_pvalue"]
+        p_z2_10 = lb_z2.loc[lags[1], "lb_pvalue"]
+
+        arch_removed = (p_z2_5 > 0.05) and (p_z2_10 > 0.05)
+        mean_clean   = (p_z_5  > 0.05) and (p_z_10  > 0.05)
+
+        if arch_removed and mean_clean:
+            verdict = "PASS"
+        elif arch_removed and not mean_clean:
+            verdict = "PASS (mean AR)"
+        elif not arch_removed:
+            verdict = "REVIEW (ARCH left)"
+        else:
+            verdict = "REVIEW"
+
+        rows.append({
+            "asset":       asset,
+            "method":      fit["method"],
+            "LB_z_lag5":   f"{p_z_5:.3f}",
+            "LB_z_lag10":  f"{p_z_10:.3f}",
+            "LB_z2_lag5":  f"{p_z2_5:.3f}",
+            "LB_z2_lag10": f"{p_z2_10:.3f}",
+            "verdict":     verdict,
+        })
+
+    return pd.DataFrame(rows)
+

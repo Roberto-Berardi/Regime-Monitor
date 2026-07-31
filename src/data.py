@@ -467,3 +467,4 @@ def get_data(force_refresh: bool = False) -> tuple[pd.DataFrame, dict]:
     cache_meta["source"] = "cache"
     cache_meta["issues"] = issues
     return cached, cache_meta
+

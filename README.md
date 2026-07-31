@@ -4,8 +4,9 @@
 > Strategic ERC core + tactical momentum tilt + Markov regime gate.
 
 **Author:** Roberto Berardi — MSc Finance, HEC Lausanne
-**Status:** Work in progress (Phase 0 complete)
+**Status:** Phases 0-2 complete · Phase 3 in progress (GARCH)
 **Live app:** *coming soon — deployed on Streamlit Cloud in Phase 10*
+**Repo:** [Roberto-Berardi/Regime-Monitor](https://github.com/Roberto-Berardi/Regime-Monitor)
 
 ---
 
@@ -47,18 +48,30 @@ Data sources: Yahoo Finance (equities, commodities, credit ETFs) and FRED (yield
 
     regime-monitor/
     ├── app/          # Streamlit web app
-    ├── src/          # Analytics modules (data, garch, dcc, regime, erc, tilt)
+    ├── src/          # Analytics modules (data, returns, garch, dcc, regime, erc, tilt)
     ├── data/         # Cached parquet snapshots (gitignored)
     ├── notebooks/    # Exploratory work
     ├── tests/        # Sanity checks
     ├── config.py     # Central configuration — every model assumption
     └── requirements.txt
 
-Every model constant (GARCH spec, DCC parameters, tilt cap, regime threshold, transaction costs) lives in `config.py`. If a choice needs defending, the answer is one line in that file.
+Every model constant (GARCH spec, DCC parameters, tilt cap, regime threshold, transaction costs, return cap) lives in `config.py`. If a choice needs defending, the answer is one line in that file.
 
 ## Foundations
 
 Built on empirical methods coursework at HEC Lausanne (EMiF Project 2), extended for production: recursive parameter estimation to prevent look-ahead in the regime gate, transaction-cost accounting in the backtest, cached data with stale-data fallback so the deployed app degrades gracefully.
+
+## Build log
+
+- **Phase 0** — Project skeleton, environment (Python 3.11 conda), config, git+GitHub setup.
+- **Phase 1** — Data layer: Yahoo + FRED downloaders, parquet cache, 4-check validator, graceful cache fallback (tested against simulated Yahoo outage).
+- **Phase 2** — Returns module: log returns for prices, modified-duration proxies for bonds, ±25% winsorization for extreme events. Reconciled against EMiF Project 2 — 5/5 comparable assets within 5% relative deviation.
+
+## Data notes
+
+- **Free-data limitation:** FRED restricted ICE BofA credit spread series to a rolling 3-year window in April 2026 (licensing change with ICE Data Indices). Long-history context uses Moody's Baa/Aaa Fed-computed proxies. Documented in `config.py`.
+- **Winsorization:** daily returns are capped at ±25% per asset before entering any model. The 2020-04-20 WTI negative-price event and 2008 EM equity outliers survive as extreme days but no longer dominate volatility estimation. Sign and direction preserved.
+- **Instrument choice:** US IG and US HY use LQD and HYG ETFs (Yahoo) rather than bond total-return indices; MSCI EM uses the EEM ETF. ETF vols run 2-6pp higher than the index equivalents — a documented trade-off in favour of intraday-refreshable data.
 
 ## Limitations
 

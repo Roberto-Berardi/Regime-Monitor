@@ -76,6 +76,20 @@ DCC_A = 0.05
 DCC_B = 0.93
 
 # ---------------------------------------------------------------------------
+# 4b. RETURNS PROCESSING - OUTLIER CAP (winsorization)
+# ---------------------------------------------------------------------------
+# Daily returns are winsorized at +/- RETURN_CAP before entering any model.
+# Rationale: extreme single-day events (notably WTI on 2020-04-20 during
+# COVID demand collapse when oil futures went to -$37/bbl) can dominate
+# GARCH/DCC estimation and inflate long-run vol. Standard practice in
+# production risk modeling (Chan et al. 1992; Hyndman & Athanasopoulos).
+# The sign and direction of every event is preserved; only the magnitude
+# is capped. The threshold is chosen so that in a Student-t(nu=6) with
+# annualised vol of 40%, a +/- 25% single-day return is above the 99.9th
+# percentile - i.e. only true tail events are affected.
+RETURN_CAP = 0.25   # cap daily log returns at +/- 25%
+
+# ---------------------------------------------------------------------------
 # 5. MOMENTUM SIGNAL
 # ---------------------------------------------------------------------------
 # 12-1 month time-series momentum (Moskowitz-Ooi-Pedersen 2012).

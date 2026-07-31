@@ -233,3 +233,132 @@ def fit_garch_hardened(returns: pd.Series, name: str = "asset",
         "converged":   False,
         "method":      "EWMA-fallback",
     }
+
+# =============================================================================
+# 3. MULTI-ASSET WRAPPER
+# =============================================================================
+
+def fit_all(returns: pd.DataFrame, verbose: bool = True) -> tuple[dict, pd.DataFrame]:
+    """
+    Fit hardened GARCH(1,1)-t on every column of a returns DataFrame.
+
+    Parameters
+    ----------
+    returns : pd.DataFrame
+        One column per asset, daily returns in decimal units.
+    verbose : bool
+        Print progress per asset.
+
+    Returns
+    -------
+    fits : dict
+        Keyed by asset name -> full result dict from fit_garch_hardened.
+    summary : pd.DataFrame
+        One row per asset, columns: model params, method, converged.
+    """
+    if verbose:
+        print("\n" + "="*70)
+        print(f"[fit_all] fitting GARCH(1,1)-t on {returns.shape[1]} assets")
+        print("="*70)
+
+    fits = {}
+    rows = []
+    for col in returns.columns:
+        if verbose:
+            print(f"\n----- {col} -----")
+        fit = fit_garch_hardened(returns[col], name=col)
+        fits[col] = fit
+        rows.append({
+            "asset":       col,
+            "method":      fit["method"],
+            "converged":   fit["converged"],
+            "mu":          fit["mu"],
+            "omega":       fit["omega"],
+            "alpha":       fit["alpha"],
+            "beta":        fit["beta"],
+            "persistence": fit["persistence"],
+            "nu":          fit["nu"],
+            "loglik":      fit["loglik"],
+        })
+
+    summary = pd.DataFrame(rows).set_index("asset")
+
+    if verbose:
+        print("\n" + "="*70)
+        print("[fit_all] SUMMARY")
+        print("="*70)
+        cols_to_show = ["method", "converged", "mu", "omega", "alpha", "beta",
+                       "persistence", "nu"]
+        print(summary[cols_to_show].round(4).to_string())
+
+    return fits, summary
+
+
+# =============================================================================
+# 4. RECONCILIATION vs PROJECT 2
+# =============================================================================
+
+# Project 2 GARCH(1,1)-t results, from stored notebook outputs.
+# (Note: Project 2 selected order per asset via BIC and sometimes chose GARCH(2,1)
+# or ARCH(2,0); we fix GARCH(1,1) as a pre-committed spec, so exact matches on
+# omega/alpha/beta aren't expected for those assets. We compare persistence
+# and nu which are less order-sensitive.)
+PROJECT2_GARCH = {
+    "SP500":        {"model": "GARCH(1,1)", "omega": 0.0166, "persistence": 0.9999, "nu": 4.73},
+    "EuroStoxx50":  {"model": "GARCH(2,1)", "omega": 0.0355, "persistence": 0.9863, "nu": 5.33},
+    "MSCI_EM":      {"model": "GARCH(1,1)", "omega": 0.0271, "persistence": 0.9785, "nu": 7.81},
+    "US_IG":        {"model": "GARCH(1,1)", "omega": 0.0008, "persistence": 0.9917, "nu": 9.49},
+    "US_HY":        {"model": "GARCH(2,0)", "omega": 0.0152, "persistence": 1.0000, "nu": 3.59},
+    "Gold":         {"model": "GARCH(2,1)", "omega": 0.0113, "persistence": 0.9929, "nu": 4.88},
+    "Oil_WTI":      {"model": "GARCH(2,1)", "omega": 0.0717, "persistence": 0.9896, "nu": 6.31},
+    "US_10Y_proxy": {"model": "GARCH(1,1)", "omega": 0.0019, "persistence": 0.9921, "nu": 10.93},
+    # US_2Y_proxy has no Project 2 target - new series
+}
+
+
+def reconcile_garch_vs_project2(summary: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compare our GARCH persistence and nu against Project 2's stored results.
+    """
+    rows = []
+    for asset in summary.index:
+        target = PROJECT2_GARCH.get(asset)
+        our_pers = summary.loc[asset, "persistence"]
+        our_nu   = summary.loc[asset, "nu"]
+
+        if target is None:
+            rows.append({
+                "asset":         asset,
+                "p2_model":      "n/a",
+                "our_pers":      f"{our_pers:.4f}" if pd.notna(our_pers) else "  n/a",
+                "p2_pers":       "  n/a",
+                "pers_dev":      "  n/a",
+                "our_nu":        f"{our_nu:.2f}" if pd.notna(our_nu) else " n/a",
+                "p2_nu":         " n/a",
+                "nu_dev":        "  n/a",
+                "verdict":       "no target",
+            })
+            continue
+
+        pers_dev = (our_pers - target["persistence"]) / target["persistence"]
+        nu_dev   = (our_nu   - target["nu"])          / target["nu"]
+
+        # We compare against Project 2's numbers but note that they used
+        # different orders on some assets - flag those with '~' verdict
+        order_note = "" if target["model"] == "GARCH(1,1)" else " (P2 used " + target["model"] + ")"
+        pers_ok = abs(pers_dev) <= 0.05
+        nu_ok   = abs(nu_dev)   <= 0.25   # nu is noisier, wider tolerance
+        verdict = ("PASS" if pers_ok and nu_ok else "REVIEW") + order_note
+
+        rows.append({
+            "asset":         asset,
+            "p2_model":      target["model"],
+            "our_pers":      f"{our_pers:.4f}",
+            "p2_pers":       f"{target['persistence']:.4f}",
+            "pers_dev":      f"{pers_dev:+.1%}",
+            "our_nu":        f"{our_nu:.2f}",
+            "p2_nu":         f"{target['nu']:.2f}",
+            "nu_dev":        f"{nu_dev:+.1%}",
+            "verdict":       verdict,
+        })
+    return pd.DataFrame(rows)

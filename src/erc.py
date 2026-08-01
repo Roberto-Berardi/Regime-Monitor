@@ -185,3 +185,79 @@ def build_H(fits: dict, dcc_result: dict, date: pd.Timestamp) -> tuple[np.ndarra
     D_t = np.diag(sigmas)
     H_t = D_t @ R_t @ D_t
     return H_t, assets
+
+# =============================================================================
+# 5. MONTHLY REBALANCE LOOP OVER FULL SAMPLE
+# =============================================================================
+
+def erc_weight_history(fits: dict,
+                       dcc_result: dict,
+                       rebal_freq: str = "ME",
+                       verbose: bool = True) -> pd.DataFrame:
+    """
+    Build the full ERC weight history by rebalancing at the end of each period.
+
+    Parameters
+    ----------
+    fits, dcc_result : outputs of Phases 3 and 4.
+    rebal_freq : pandas offset alias; "ME" = month-end (Maillard/Roncalli standard),
+                 "W-FRI" for weekly, "QE" for quarterly.
+
+    Returns
+    -------
+    pd.DataFrame
+        Index = rebalance dates (only dates where DCC has data).
+        Columns = asset names.
+        Values = weights at that rebalance (sum to 1 per row).
+        Extra columns 'converged' and 'method' for diagnostics.
+    """
+    assets = dcc_result["assets"]
+    dates  = dcc_result["dates"]
+
+    # Rebalance dates: last available DCC date <= each period-end
+    period_ends = pd.date_range(start=dates[0], end=dates[-1], freq=rebal_freq)
+    rebal_dates = []
+    for p_end in period_ends:
+        # Find the last actual DCC date on-or-before this period-end
+        eligible = dates[dates <= p_end]
+        if len(eligible) > 0:
+            rebal_dates.append(eligible[-1])
+    rebal_dates = pd.DatetimeIndex(rebal_dates).unique()
+
+    if verbose:
+        print(f"\n[erc_weight_history] rebalancing {rebal_freq} on {len(rebal_dates)} dates")
+        print(f"[erc_weight_history] first rebalance: {rebal_dates[0].date()}")
+        print(f"[erc_weight_history] last  rebalance: {rebal_dates[-1].date()}")
+
+    # Storage
+    weights_rows = []
+    prev_weights = None
+    n_failed = 0
+
+    for i, rebal_date in enumerate(rebal_dates):
+        H_t, _ = build_H(fits, dcc_result, rebal_date)
+        result = solve_erc(H_t, previous_weights=prev_weights)
+
+        if not result["converged"]:
+            n_failed += 1
+
+        row = {a: w for a, w in zip(assets, result["weights"])}
+        row["converged"] = result["converged"]
+        row["method"]    = result["method"]
+        weights_rows.append((rebal_date, row))
+
+        prev_weights = result["weights"]
+
+        if verbose and (i + 1) % 24 == 0:
+            print(f"[erc_weight_history]   {i+1}/{len(rebal_dates)} through {rebal_date.date()}")
+
+    W = pd.DataFrame(
+        [r for _, r in weights_rows],
+        index=[d for d, _ in weights_rows],
+    )
+    W.index.name = "date"
+
+    if verbose:
+        print(f"[erc_weight_history] done. {len(W)} rebalances, {n_failed} used inverse-vol fallback")
+
+    return W

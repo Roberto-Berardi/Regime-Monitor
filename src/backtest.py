@@ -335,3 +335,117 @@ def lookahead_test(weights: pd.DataFrame,
         "degradation":   degradation,
         "verdict":       verdict,
     }
+
+# =============================================================================
+# 8. BLOCK BOOTSTRAP FOR SHARPE CIs
+# =============================================================================
+
+def bootstrap_sharpe_ci(net_series_dict: dict, rf: pd.Series,
+                       n_boots: int = 5000, block_size: int = 52,
+                       baseline: str = "Tilted", seed: int = 42) -> dict:
+    """
+    Block bootstrap for excess-Sharpe confidence intervals AND pairwise
+    difference tests across multiple strategies.
+
+    Method:
+    1. Sample n_blocks = len(series) // block_size contiguous 52-week blocks
+       WITH REPLACEMENT.
+    2. Concatenate blocks to form a resampled series of the same length.
+    3. Use the SAME block indices for every strategy (preserves pairing).
+    4. Compute excess Sharpe on each resample.
+    5. 5000 iterations -> distribution of Sharpes per strategy, and of
+       pairwise DIFFERENCES vs baseline.
+
+    Why blocks: financial returns have serial dependence (vol clustering).
+    IID bootstrap breaks that structure and produces tight-but-wrong CIs.
+    52-week blocks preserve annual cycles and vol regimes.
+
+    Returns
+    -------
+    dict with:
+        strategy_cis    : per-strategy mean Sharpe + 95% CI
+        pairwise_diffs  : baseline-vs-others: mean diff, 95% CI, p-value,
+                          verdict (distinguishable / indistinguishable)
+    """
+    rng = np.random.default_rng(seed)
+    labels = list(net_series_dict.keys())
+
+    # Common date index across strategies
+    common_idx = net_series_dict[labels[0]].index
+    n = len(common_idx)
+    n_blocks = n // block_size
+
+    print(f"[bootstrap_sharpe_ci] {n_boots} resamples, {n_blocks} blocks of "
+          f"{block_size} weeks each, baseline = {baseline}")
+
+    # RF aligned once
+    rf_arr = rf.reindex(common_idx).fillna(0.0).values
+
+    # Pre-extract net arrays per strategy (aligned)
+    net_arrays = {
+        label: net_series_dict[label].reindex(common_idx).fillna(0.0).values
+        for label in labels
+    }
+
+    # Storage
+    sharpes = {label: np.zeros(n_boots) for label in labels}
+
+    for b in range(n_boots):
+        # Sample block START positions
+        block_starts = rng.integers(0, n - block_size + 1, size=n_blocks)
+        # Build resampled positional index by unrolling each block
+        idx_positions = np.concatenate([
+            np.arange(start, start + block_size) for start in block_starts
+        ])
+        rf_resamp = rf_arr[idx_positions]
+
+        for label in labels:
+            net_resamp = net_arrays[label][idx_positions]
+            excess = net_resamp - rf_resamp
+            mean_e = excess.mean() * 52
+            std_e  = excess.std()  * np.sqrt(52)
+            sharpes[label][b] = mean_e / std_e if std_e > 0 else np.nan
+
+        if (b + 1) % 1000 == 0:
+            print(f"[bootstrap_sharpe_ci]   {b+1}/{n_boots} resamples done")
+
+    # Per-strategy CIs
+    strategy_cis = {}
+    for label in labels:
+        s = sharpes[label]
+        s = s[np.isfinite(s)]
+        strategy_cis[label] = {
+            "mean":    float(np.mean(s)),
+            "ci_low":  float(np.percentile(s,  2.5)),
+            "ci_high": float(np.percentile(s, 97.5)),
+        }
+
+    # Pairwise diffs vs baseline
+    pairwise_diffs = {}
+    if baseline not in labels:
+        print(f"[bootstrap_sharpe_ci] baseline '{baseline}' not in labels, skipping pairwise")
+    else:
+        for label in labels:
+            if label == baseline:
+                continue
+            d = sharpes[baseline] - sharpes[label]
+            d = d[np.isfinite(d)]
+            # Two-sided p-value: min tail mass, doubled
+            p_val = 2 * min((d > 0).mean(), (d < 0).mean())
+            ci_low  = float(np.percentile(d,  2.5))
+            ci_high = float(np.percentile(d, 97.5))
+            distinguishable = (ci_low > 0) or (ci_high < 0)
+            pairwise_diffs[f"{baseline} vs {label}"] = {
+                "mean_diff":       float(np.mean(d)),
+                "ci_low":          ci_low,
+                "ci_high":         ci_high,
+                "p_value":         float(p_val),
+                "distinguishable": bool(distinguishable),
+            }
+
+    return {
+        "strategy_cis":   strategy_cis,
+        "pairwise_diffs": pairwise_diffs,
+        "n_boots":        n_boots,
+        "block_size":     block_size,
+    }

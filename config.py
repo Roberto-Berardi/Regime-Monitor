@@ -128,15 +128,16 @@ DATA_DIR     = PROJECT_ROOT / "data"
 CACHE_FILE   = DATA_DIR / "prices_cache.parquet"
 
 # ---------------------------------------------------------------------------
-# STRATEGY B — Enhanced Trend + Vol-Scaled Leverage (pre-committed spec)
+# STRATEGY B — Cross-Asset Trend (pre-committed spec)
 # ---------------------------------------------------------------------------
-STRAT_B_BASE_WEIGHTS = {
-    "SP500":        0.60,   # equity base
-    "US_10Y_proxy": 0.40,   # bond base
-}
-STRAT_B_VOL_TARGET           = 0.08   # 8% annualized portfolio vol target
-STRAT_B_VOL_LOOKBACK_DAYS    = 63     # 3 months daily
-STRAT_B_LEV_MIN              = 0.5
-STRAT_B_LEV_MAX              = 1.25
-STRAT_B_LEV_CAP_HIGH_REGIME  = 1.0    # halved cap when P(high-corr) > threshold
-STRAT_B_FINANCING_BPS        = 50     # bps/yr on borrowed portion above 1.0
+# 9-asset trend book: equities (3), rates (2), credit (2), commodities (2).
+# Each asset sized to a target vol contribution; aggregate leverage vol-scales
+# to hit 8% portfolio vol target; regime-gated cap on leverage.
+STRAT_B_PER_ASSET_VOL_BUDGET   = 0.015  # 1.5% ann vol contribution per asset (natural aggregate ~8% under 0.3 correlation)
+STRAT_B_MAX_PER_ASSET_WEIGHT   = 0.25   # cap per-asset weight at 25% to prevent low-vol assets (US_2Y) dominating
+STRAT_B_VOL_TARGET             = 0.08   # 8% ann aggregate portfolio vol target
+STRAT_B_VOL_LOOKBACK_DAYS      = 63     # 3 months daily
+STRAT_B_LEV_MIN                = 0.5
+STRAT_B_LEV_MAX                = 1.25
+STRAT_B_LEV_CAP_HIGH_REGIME    = 1.0    # halved cap when P(high-corr) > threshold
+STRAT_B_FINANCING_BPS          = 50     # bps/yr on borrowed portion above 1.0

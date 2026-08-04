@@ -117,3 +117,34 @@ def build_signal_panel(panel: pd.DataFrame) -> pd.DataFrame:
         signals[f"{yc}_proxy"] = 0.0
 
     return signals
+
+# =============================================================================
+# 4. SIGNAL PANEL WITH BOND RETURN MOMENTUM
+# =============================================================================
+# Used by cross-asset trend strategies (Strategy B) which need momentum
+# signals on ALL 9 assets, not just the 7 price-based ones. Bonds are
+# handled via momentum on their cumulative-return synthetic price series
+# (standard practice at CTAs like AQR Managed Futures, Man AHL).
+
+def build_signal_panel_full(panel: pd.DataFrame, bond_returns: pd.DataFrame) -> pd.DataFrame:
+    """
+    Full-universe momentum signal panel, 12-1M + 200DMA on all 9 assets.
+    - Price assets: momentum on price levels (as in build_signal_panel).
+    - Bond assets:  momentum on cumulative-return synthetic prices, so
+                    a trend in bond total returns produces a signal even
+                    though the underlying yields are stationary.
+
+    Both signals use the same combined_signal() logic - agreement gate.
+    """
+    price_cols = [c for c in config.ASSETS if c in panel.columns]
+    prices = panel[price_cols].ffill()
+    signals_price = combined_signal(prices)
+
+    # Synthetic bond prices: (1 + r).cumprod() - so momentum on these =
+    # momentum on cumulative bond returns.
+    bond_cols = [c for c in bond_returns.columns if c.endswith("_proxy")]
+    synth_prices = (1.0 + bond_returns[bond_cols].fillna(0.0)).cumprod()
+    signals_bond = combined_signal(synth_prices)
+
+    signals = pd.concat([signals_price, signals_bond], axis=1)
+    return signals

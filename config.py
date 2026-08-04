@@ -42,9 +42,14 @@ FRED_SERIES = {
     # Credit spreads - HISTORY (Moody's, Fed-computed, long history)
     "BAA_SPREAD":  "BAA10Y",     # Moody's Baa - 10Y Treasury, daily since 1986
     "AAA_SPREAD":  "AAA10Y",     # Moody's Aaa - 10Y Treasury, daily since 1986
-    
+
     # Risk-free rate for excess-Sharpe computation
     "RF_RATE":     "DGS3MO",     # 3-Month Treasury Constant Maturity
+
+    # ALFRED point-in-time data
+    "PAYEMS":       "PAYEMS",      # Nonfarm Payrolls (revised heavily; classic macro signal)
+    "INDPRO":       "INDPRO",      # Industrial Production (also heavily revised)
+    
 }
 
 # Modified durations for yield-to-return conversion (approximate, in years).

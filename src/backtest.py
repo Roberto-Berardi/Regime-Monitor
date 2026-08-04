@@ -39,6 +39,22 @@ def daily_log_to_weekly_simple(daily_returns: pd.DataFrame) -> pd.DataFrame:
     weekly_log    = daily_returns.resample("W-FRI").sum()
     weekly_simple = np.exp(weekly_log) - 1
     return weekly_simple
+def get_rf_weekly(panel: pd.DataFrame, weekly_index: pd.DatetimeIndex) -> pd.Series:
+    """
+    Convert the DGS3MO annualized yield (percent) to weekly simple returns.
+
+    DGS3MO gives annual yield in percent (e.g. 4.5 means 4.5%). We convert to
+    a weekly simple return via compounding: rf_weekly = (1 + y/100)^(1/52) - 1.
+    Forward-filled to the strategy's weekly Friday grid.
+    """
+    if "RF_RATE" not in panel.columns:
+        raise KeyError("RF_RATE column missing from panel. Refresh cache after "
+                       "adding DGS3MO to config.FRED_SERIES.")
+    y_annual = panel["RF_RATE"].ffill() / 100.0
+    y_weekly_daily = (1.0 + y_annual) ** (1.0 / 52.0) - 1.0
+    rf = y_weekly_daily.reindex(weekly_index, method="ffill").fillna(0.0)
+    rf.name = "rf_weekly"
+    return rf
 
 
 # =============================================================================
@@ -208,28 +224,42 @@ def build_pure_erc_weekly(erc_hist: pd.DataFrame,
 # 6. PERFORMANCE SUMMARY TABLE
 # =============================================================================
 
-def performance_stats(net: pd.Series, turnover: pd.Series = None,
-                     cost: pd.Series = None) -> dict:
+def performance_stats(net: pd.Series, rf: pd.Series = None,
+                      turnover: pd.Series = None, cost: pd.Series = None) -> dict:
     """
-    Compact stats for a strategy: ann return, ann vol, Sharpe, max DD,
-    Calmar, turnover, cost drag.
+    Stats for a strategy: raw AND excess Sharpe, ann return, ann vol,
+    max DD, Calmar, turnover, cost drag.
+
+    Raw Sharpe:    mean(net) / std(net) * sqrt(52)
+    Excess Sharpe: mean(net - rf) / std(net - rf) * sqrt(52)  [textbook]
     """
     if len(net) < 2:
         return {}
     ann_ret = net.mean() * 52
     ann_vol = net.std() * np.sqrt(52)
-    sharpe  = ann_ret / ann_vol if ann_vol > 0 else np.nan
-    eq      = (1 + net).cumprod()
-    mdd     = max_drawdown(eq)
-    calmar  = ann_ret / abs(mdd) if mdd < 0 else np.nan
+    sharpe_raw = ann_ret / ann_vol if ann_vol > 0 else np.nan
+    eq  = (1 + net).cumprod()
+    mdd = max_drawdown(eq)
+    calmar = ann_ret / abs(mdd) if mdd < 0 else np.nan
+
     stats = {
-        "ann_return": ann_ret,
-        "ann_vol":    ann_vol,
-        "sharpe":     sharpe,
-        "max_dd":     mdd,
-        "calmar":     calmar,
-        "final_eq":   float(eq.iloc[-1]),
+        "ann_return":    ann_ret,
+        "ann_vol":       ann_vol,
+        "sharpe_raw":    sharpe_raw,
+        "max_dd":        mdd,
+        "calmar":        calmar,
+        "final_eq":      float(eq.iloc[-1]),
     }
+
+    if rf is not None:
+        rf_aligned = rf.reindex(net.index).fillna(0.0)
+        excess = net - rf_aligned
+        ann_excess = excess.mean() * 52
+        vol_excess = excess.std() * np.sqrt(52)
+        stats["ann_rf"]        = float(rf_aligned.mean() * 52)
+        stats["ann_excess"]    = ann_excess
+        stats["sharpe_excess"] = ann_excess / vol_excess if vol_excess > 0 else np.nan
+
     if turnover is not None:
         stats["ann_turnover"] = float(turnover.mean() * 52)
     if cost is not None:
@@ -237,16 +267,23 @@ def performance_stats(net: pd.Series, turnover: pd.Series = None,
     return stats
 
 
-def compare_strategies(results: dict) -> pd.DataFrame:
+def compare_strategies(results: dict, rf: pd.Series = None) -> pd.DataFrame:
     """
     Take a dict of {label: run_strategy_output} and return a comparison
-    DataFrame with all key stats side by side.
+    DataFrame with all key stats side by side. If rf is provided, excess
+    Sharpe columns are added.
     """
     rows = {}
     for label, r in results.items():
-        rows[label] = performance_stats(r["net"], r["turnover"], r["cost"])
+        rows[label] = performance_stats(r["net"], rf=rf,
+                                        turnover=r["turnover"], cost=r["cost"])
     df = pd.DataFrame(rows).T
-    return df
+    # Reorder columns to put the interview-facing ones first
+    preferred = ["ann_return", "ann_rf", "ann_excess", "ann_vol",
+                 "sharpe_raw", "sharpe_excess", "max_dd", "calmar",
+                 "final_eq", "ann_turnover", "cost_bps"]
+    ordered = [c for c in preferred if c in df.columns]
+    return df[ordered]
 
 
 # =============================================================================
@@ -279,8 +316,8 @@ def lookahead_test(weights: pd.DataFrame,
                           weekly_returns, cost_bps=cost_bps,
                           label=f"lagged_{extra_lag_weeks}w", verbose=False)
 
-    base_sharpe   = performance_stats(base["net"])["sharpe"]
-    lagged_sharpe = performance_stats(lagged["net"])["sharpe"]
+    base_sharpe   = performance_stats(base["net"])["sharpe_raw"]
+    lagged_sharpe = performance_stats(lagged["net"])["sharpe_raw"]
     degradation   = (base_sharpe - lagged_sharpe) / base_sharpe if base_sharpe != 0 else np.nan
 
     # Rule of thumb: if the extra lag halves or reverses Sharpe, look-ahead

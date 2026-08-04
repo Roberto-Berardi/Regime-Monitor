@@ -467,3 +467,104 @@ def get_data(force_refresh: bool = False) -> tuple[pd.DataFrame, dict]:
     cache_meta["source"] = "cache"
     cache_meta["issues"] = issues
     return cached, cache_meta
+
+# =============================================================================
+# 6. SF FED DAILY NEWS SENTIMENT INDEX (reference indicator, not a signal)
+# =============================================================================
+# The DNSI is a daily time series of US economic-news sentiment computed by
+# lexical analysis of 24 major US newspapers. History back to 1980. Updated
+# weekly by the SF Fed. Reference: Buckman, Shapiro, Sudhof, Wilson (2020).
+#
+# We do NOT use this as a portfolio input. It's a dashboard context indicator:
+# "the news environment right now vs 45 years of history."
+
+DNSI_URL       = "https://www.frbsf.org/wp-content/uploads/news-sentiment-chart-1.csv"
+DNSI_CACHE     = config.DATA_DIR / "dnsi_cache.parquet"
+
+
+def fetch_dnsi() -> pd.Series:
+    """
+    Download the SF Fed Daily News Sentiment Index. Cache to parquet so
+    subsequent calls don't re-hit the SF Fed server.
+
+    Returns
+    -------
+    pd.Series indexed by date, values are the smoothed daily sentiment
+    score (typically between -0.7 and +0.4).
+    Falls back to cached copy on network failure.
+    """
+    import requests
+
+    try:
+        print(f"[fetch_dnsi] downloading from SF Fed...")
+        r = requests.get(DNSI_URL, timeout=15)
+        r.raise_for_status()
+        # SF Fed CSV: columns are 'date' and one value column with a
+        # dynamic name (e.g. 'News Sentiment' or similar - varies).
+        from io import StringIO
+        df = pd.read_csv(StringIO(r.text))
+        # Robust column detection: first col is date, second is value.
+        date_col = df.columns[0]
+        val_col  = df.columns[1]
+        df[date_col] = pd.to_datetime(df[date_col])
+        s = df.set_index(date_col)[val_col]
+        s.name = "DNSI"
+        s = s.sort_index()
+
+        # Cache
+        config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        s.to_frame().to_parquet(DNSI_CACHE)
+        print(f"[fetch_dnsi] downloaded {len(s)} obs, {s.index.min().date()} to {s.index.max().date()}")
+        print(f"[fetch_dnsi] cached to {DNSI_CACHE.name}")
+        return s
+
+    except Exception as e:
+        print(f"[fetch_dnsi] download failed: {e}")
+        if DNSI_CACHE.exists():
+            print(f"[fetch_dnsi] falling back to cache")
+            s = pd.read_parquet(DNSI_CACHE).squeeze()
+            s.name = "DNSI"
+            return s
+        raise RuntimeError("DNSI download failed and no cache available") from e
+
+
+def dnsi_summary(dnsi: pd.Series = None) -> dict:
+    """
+    Compact summary for the dashboard.
+    - current value + date
+    - percentile within full history
+    - recent 1-month vs 12-month change
+    - all-time min/max reference points
+    """
+    if dnsi is None:
+        dnsi = fetch_dnsi()
+
+    latest_date  = dnsi.index[-1]
+    latest_value = float(dnsi.iloc[-1])
+    pct_rank     = float((dnsi <= latest_value).mean() * 100)
+
+    # Recent momentum: last 21 days (1 month) vs 252 days (1 year)
+    recent_1m  = float(dnsi.tail(21).mean())
+    recent_12m = float(dnsi.tail(252).mean())
+
+    hist_min = float(dnsi.min())
+    hist_max = float(dnsi.max())
+    hist_min_date = dnsi.idxmin()
+    hist_max_date = dnsi.idxmax()
+    hist_mean = float(dnsi.mean())
+
+    return {
+        "latest_date":   latest_date.date().isoformat(),
+        "latest_value":  latest_value,
+        "percentile":    pct_rank,
+        "recent_1m":     recent_1m,
+        "recent_12m":    recent_12m,
+        "delta_1m_12m":  recent_1m - recent_12m,
+        "hist_min":      hist_min,
+        "hist_min_date": hist_min_date.date().isoformat(),
+        "hist_max":      hist_max,
+        "hist_max_date": hist_max_date.date().isoformat(),
+        "hist_mean":     hist_mean,
+    }
+
+

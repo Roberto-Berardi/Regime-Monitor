@@ -49,7 +49,7 @@ FRED_SERIES = {
     # ALFRED point-in-time data
     "PAYEMS":       "PAYEMS",      # Nonfarm Payrolls (revised heavily; classic macro signal)
     "INDPRO":       "INDPRO",      # Industrial Production (also heavily revised)
-    
+
 }
 
 # Modified durations for yield-to-return conversion (approximate, in years).
@@ -126,3 +126,17 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 DATA_DIR     = PROJECT_ROOT / "data"
 CACHE_FILE   = DATA_DIR / "prices_cache.parquet"
+
+# ---------------------------------------------------------------------------
+# STRATEGY B — Enhanced Trend + Vol-Scaled Leverage (pre-committed spec)
+# ---------------------------------------------------------------------------
+STRAT_B_BASE_WEIGHTS = {
+    "SP500":        0.60,   # equity base
+    "US_10Y_proxy": 0.40,   # bond base
+}
+STRAT_B_VOL_TARGET           = 0.08   # 8% annualized portfolio vol target
+STRAT_B_VOL_LOOKBACK_DAYS    = 63     # 3 months daily
+STRAT_B_LEV_MIN              = 0.5
+STRAT_B_LEV_MAX              = 1.25
+STRAT_B_LEV_CAP_HIGH_REGIME  = 1.0    # halved cap when P(high-corr) > threshold
+STRAT_B_FINANCING_BPS        = 50     # bps/yr on borrowed portion above 1.0

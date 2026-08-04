@@ -8,9 +8,11 @@ ERC) inherit identical inputs.
 
 Conventions (from Project 2):
 - Price assets  -> log returns: ln(P_t / P_{t-1})
-- Yield series  -> first difference, then converted to bond proxy
-                   via  ret = -D * dY / 100
-                   (dY in percentage points, hence divide by 100)
+- Yield series  -> first difference, converted to bond return proxy via
+                   price term (-D * dY / 100) plus daily carry (y_prev / (100 * 252)).
+                   Both terms in the same decimal units as price returns.
+                   The lagged carry term (y_prev, not y_t) prevents look-ahead:
+                   day-t coupon is set by yesterday's yield.
 - Panel forward-filled to business-day frequency BEFORE differencing,
   matching Project 2's df_clean.resample("B").last().ffill() step.
 
@@ -98,14 +100,21 @@ def compute_returns(panel: pd.DataFrame) -> pd.DataFrame:
     # Step 3: yield first differences (in percentage points)
     yield_diff = df[yield_cols].diff()
 
-    # Step 4: bond return proxies via modified duration
-    #    ret = -D * dY / 100
+    # Step 4: bond return proxies via modified duration + daily carry
+    #    ret = -D * dY / 100  +  y_prev / (100 * 252)
+    # The first term is price change from yield move.
+    # The second term is one day of coupon income (yesterday's yield / 252 trading days).
+    # Using y_prev (not y_t) avoids look-ahead: on day t we earn the coupon
+    # that was known at yesterday's close.
     YIELD_SCALE = 100.0
+    TRADING_DAYS = 252
     bond_proxies = pd.DataFrame(index=df.index)
     for yc in yield_cols:
         D = config.DURATIONS[yc]
-        bond_proxies[f"{yc}_proxy"] = -D * yield_diff[yc] / YIELD_SCALE
-        print(f"[compute_returns] bond proxy: {yc}_proxy = -{D} * d{yc} / {YIELD_SCALE:.0f}")
+        price_return = -D * yield_diff[yc] / YIELD_SCALE
+        carry_return = df[yc].shift(1) / (YIELD_SCALE * TRADING_DAYS)
+        bond_proxies[f"{yc}_proxy"] = price_return + carry_return
+        print(f"[compute_returns] bond proxy: {yc}_proxy = -{D} * d{yc}/{YIELD_SCALE:.0f} + {yc}_prev/{YIELD_SCALE*TRADING_DAYS:.0f}")
 
     # Step 5: combine and drop the initial NaN row
     returns = pd.concat([log_returns, bond_proxies], axis=1).iloc[1:]

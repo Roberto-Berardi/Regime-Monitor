@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(APP_DIR))
 PRE = ROOT / "data" / "precomputed"
 
-from tabs import this_week, market_conditions  # noqa: E402  (import after sys.path setup)
+from tabs import this_week, market_conditions, strategy  # noqa: E402  (import after sys.path setup)
 
 st.set_page_config(
     page_title="Cross-Asset Regime Monitor",
@@ -147,8 +147,7 @@ with tab2:
     market_conditions.render(D, M)
 
 with tab3:
-    st.markdown("## The Strategy")
-    st.caption("Step 6 - ERC + tilt explained, evidence vs equal-weight buy-and-hold")
+    strategy.render(D, M)
 
 with tab4:
     st.markdown("## Method & Limitations")

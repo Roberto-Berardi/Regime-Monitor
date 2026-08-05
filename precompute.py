@@ -35,7 +35,7 @@ from src.narrative import build_narrative, weekly_moves
 from src.backtest import (daily_log_to_weekly_simple, run_strategy,
                           build_60_40_weights, build_equal_weight,
                           build_pure_erc_weekly, get_rf_weekly,
-                          compare_strategies, lookahead_test,
+                          compare_strategies, lookahead_test, performance_stats,
                           bootstrap_sharpe_ci, cumulative_equity, max_drawdown)
 
 OUT = config.DATA_DIR / "precomputed"
@@ -142,6 +142,46 @@ def main():
     }
     comp = compare_strategies(runs, rf=rf)
     _save(comp, "comparison")
+
+    # Cost sensitivity: the Sharpe edge over buy-and-hold is thin, so it is
+    # honest to show at what cost level it disappears. Drawdown is unaffected
+    # by cost, which is why the headline claim rests on drawdown not Sharpe.
+    cost_rows = []
+    for bps in [0, 5, 10, 20, 40]:
+        r_t = run_strategy(tilt["weights"], wk_ret, cost_bps=bps, verbose=False)
+        r_e = run_strategy(build_equal_weight(idx, cols), wk_ret, cost_bps=bps, verbose=False)
+        st_t = performance_stats(r_t["net"], rf=rf, turnover=r_t["turnover"], cost=r_t["cost"])
+        st_e = performance_stats(r_e["net"], rf=rf)
+        cost_rows.append({
+            "cost_bps":      bps,
+            "drag_bps":      st_t.get("cost_bps", 0.0),
+            "tilted_sharpe": st_t["sharpe_excess"],
+            "ew_sharpe":     st_e["sharpe_excess"],
+            "edge":          st_t["sharpe_excess"] - st_e["sharpe_excess"],
+            "tilted_maxdd":  st_t["max_dd"],
+            "ew_maxdd":      st_e["max_dd"],
+        })
+    _save(pd.DataFrame(cost_rows).set_index("cost_bps"), "cost_sensitivity")
+
+    # Cost sensitivity: the Sharpe edge over buy-and-hold is thin, so it is
+    # honest to show at what cost level it disappears. Drawdown is unaffected
+    # by cost, which is why the headline claim rests on drawdown not Sharpe.
+    cost_rows = []
+    for bps in [0, 5, 10, 20, 40]:
+        r_t = run_strategy(tilt["weights"], wk_ret, cost_bps=bps, verbose=False)
+        r_e = run_strategy(build_equal_weight(idx, cols), wk_ret, cost_bps=bps, verbose=False)
+        st_t = performance_stats(r_t["net"], rf=rf, turnover=r_t["turnover"], cost=r_t["cost"])
+        st_e = performance_stats(r_e["net"], rf=rf)
+        cost_rows.append({
+            "cost_bps":      bps,
+            "drag_bps":      st_t.get("cost_bps", 0.0),
+            "tilted_sharpe": st_t["sharpe_excess"],
+            "ew_sharpe":     st_e["sharpe_excess"],
+            "edge":          st_t["sharpe_excess"] - st_e["sharpe_excess"],
+            "tilted_maxdd":  st_t["max_dd"],
+            "ew_maxdd":      st_e["max_dd"],
+        })
+    _save(pd.DataFrame(cost_rows).set_index("cost_bps"), "cost_sensitivity")
 
     # Net weekly returns + equity curves + drawdown traces for charts
     nets = pd.DataFrame({k: v["net"] for k, v in runs.items()})

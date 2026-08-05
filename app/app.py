@@ -13,8 +13,12 @@ import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).parent.parent
+APP_DIR = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(APP_DIR))
 PRE = ROOT / "data" / "precomputed"
+
+from tabs import this_week  # noqa: E402  (import after sys.path setup)
 
 st.set_page_config(
     page_title="Cross-Asset Regime Monitor",
@@ -115,8 +119,12 @@ cap = M["active_cap_latest"]
 card(m2, "Strategy A tilt cap", f"±{cap:.0f}pp",
      "gated" if cap < 4 else "full")
 
-card(m3, "Strategy B gross", f"{M['strategyb_gross_latest']:.0%}",
-     f"gate {M['strategyb_gate_latest']:.2f}x")
+_vol = D.get("vol_percentiles")
+if _vol is not None and "SP500" in _vol.index:
+    card(m3, "S&P 500 vol", f"{_vol.loc['SP500', 'vol_ann']:.0%}",
+         f"{_vol.loc['SP500', 'pctile']:.0f}th pctile of own history")
+else:
+    card(m3, "Assets trending", "-", "")
 
 dnsi = M["dnsi"]
 card(m4, "News sentiment", f"{dnsi['percentile']:.0f}th pct",
@@ -125,33 +133,27 @@ card(m4, "News sentiment", f"{dnsi['percentile']:.0f}th pct",
 st.markdown("---")
 
 # --- tabs (filled in blocks 9.2 - 9.6) ---------------------------------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "This Week",
-    "Regime Monitor",
-    "Strategies",
-    "Stress & Honesty",
-    "Research Notes",
+    "Market Conditions",
+    "The Strategy",
+    "Method & Limitations",
 ])
 
 with tab1:
-    st.markdown("## This Week")
-    st.caption("Block 9.2 - signal panel and current weights")
+    this_week.render(D, M)
 
 with tab2:
-    st.markdown("## Regime Monitor")
-    st.caption("Block 9.3 - filtered regime probability and DCC correlation")
+    st.markdown("## Market Conditions")
+    st.caption("Step 5 - conditional vol percentiles, correlation matrix, regime tape")
 
 with tab3:
-    st.markdown("## Strategies")
-    st.caption("Block 9.4 - equity curves, stats, bootstrap CIs, layer ablation")
+    st.markdown("## The Strategy")
+    st.caption("Step 6 - ERC + tilt explained, evidence vs equal-weight buy-and-hold")
 
 with tab4:
-    st.markdown("## Stress & Honesty")
-    st.caption("Block 9.5 - crisis episodes, look-ahead tests, limitations")
-
-with tab5:
-    st.markdown("## Research Notes")
-    st.caption("Block 9.6 - ALFRED revision alpha, news sentiment")
+    st.markdown("## Method & Limitations")
+    st.caption("Step 7 - look-ahead tests, crisis episodes, disclosures")
 
 # --- footer ------------------------------------------------------------------
 st.markdown("---")

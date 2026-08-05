@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(APP_DIR))
 PRE = ROOT / "data" / "precomputed"
 
-from tabs import this_week  # noqa: E402  (import after sys.path setup)
+from tabs import this_week, market_conditions  # noqa: E402  (import after sys.path setup)
 
 st.set_page_config(
     page_title="Cross-Asset Regime Monitor",
@@ -144,8 +144,7 @@ with tab1:
     this_week.render(D, M)
 
 with tab2:
-    st.markdown("## Market Conditions")
-    st.caption("Step 5 - conditional vol percentiles, correlation matrix, regime tape")
+    market_conditions.render(D, M)
 
 with tab3:
     st.markdown("## The Strategy")

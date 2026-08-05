@@ -150,3 +150,13 @@ STRAT_B_LEV_MIN                = 0.5
 STRAT_B_LEV_MAX                = 1.25
 STRAT_B_LEV_CAP_HIGH_REGIME    = 1.0    # halved cap when P(high-corr) > threshold
 STRAT_B_FINANCING_BPS          = 50     # bps/yr on borrowed portion above 1.0
+
+# ---------------------------------------------------------------------------
+# STRATEGY B constants (restored after layer ablation 2026-08-05)
+# Production spec = trend filter + Markov regime gate. Vol targeting was
+# removed because an 8% target against a ~7.4% natural-vol book levered up
+# rather than de-risked (-0.02 Sharpe, +2.3pp drawdown). The vol-target
+# constants are kept so notebooks/ablation_2026-08-05.md stays reproducible.
+# ---------------------------------------------------------------------------
+STRAT_B_VOL_LOOKBACK_DAYS = 63      # 3 months daily, used for per-asset vol sizing
+STRAT_B_VOL_TARGET = 0.08    # ablation only - removed from production 2026-08-05

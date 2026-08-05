@@ -1,0 +1,69 @@
+{
+  "generated_utc": "2026-08-05T15:49:56.727948+00:00",
+  "elapsed_seconds": 16.5,
+  "data_source": "fresh",
+  "data_as_of": "2026-08-05",
+  "latest_rebalance": "2026-08-07",
+  "n_weeks": 1006,
+  "assets": [
+    "SP500",
+    "EuroStoxx50",
+    "MSCI_EM",
+    "Gold",
+    "Oil_WTI",
+    "US_IG",
+    "US_HY",
+    "US_2Y_proxy",
+    "US_10Y_proxy"
+  ],
+  "regime_params": {
+    "high_mean": 0.0064016482821156375,
+    "low_mean": -0.4264322628198807,
+    "high_sigma2": 0.0354386925881945,
+    "low_sigma2": 0.014570102734206912,
+    "pct_high": 37.16551040634292,
+    "loglik": 398.14293171749557
+  },
+  "p_high_latest": 0.9999996943807214,
+  "active_cap_latest": 2.0,
+  "strategyb_gate_latest": 0.5,
+  "strategyb_gross_latest": 0.3671613267391446,
+  "lookahead": {
+    "Tilted": {
+      "base_sharpe": 0.9745035717756224,
+      "lagged_sharpe": 0.8439031490288172,
+      "degradation": 0.13401738744665748,
+      "verdict": "SAFE"
+    },
+    "StrategyB": {
+      "base_sharpe": 0.9752785540312683,
+      "lagged_sharpe": 0.7574541419904105,
+      "degradation": 0.22334584426212467,
+      "verdict": "SAFE"
+    }
+  },
+  "dnsi": {
+    "latest_date": "2026-08-02",
+    "latest_value": 0.03,
+    "percentile": 53.62122727540154,
+    "recent_1m": 0.030476190476190483,
+    "recent_12m": -0.03250000000000001,
+    "delta_1m_12m": 0.06297619047619049,
+    "hist_min": -0.71,
+    "hist_min_date": "1980-05-31",
+    "hist_max": 0.46,
+    "hist_max_date": "1994-01-03",
+    "hist_mean": 0.00918573865976349
+  },
+  "garch_methods": {
+    "SP500": "GARCH-t",
+    "EuroStoxx50": "GARCH-t",
+    "MSCI_EM": "GARCH-t",
+    "Gold": "GARCH-t",
+    "Oil_WTI": "GARCH-t",
+    "US_IG": "GARCH-t",
+    "US_HY": "EWMA-fallback",
+    "US_2Y_proxy": "GARCH-t",
+    "US_10Y_proxy": "GARCH-t"
+  }
+}

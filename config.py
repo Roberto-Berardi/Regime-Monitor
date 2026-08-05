@@ -135,8 +135,17 @@ CACHE_FILE   = DATA_DIR / "prices_cache.parquet"
 # to hit 8% portfolio vol target; regime-gated cap on leverage.
 STRAT_B_PER_ASSET_VOL_BUDGET   = 0.015  # 1.5% ann vol contribution per asset (natural aggregate ~8% under 0.3 correlation)
 STRAT_B_MAX_PER_ASSET_WEIGHT   = 0.25   # cap per-asset weight at 25% to prevent low-vol assets (US_2Y) dominating
-STRAT_B_VOL_TARGET             = 0.08   # 8% ann aggregate portfolio vol target
-STRAT_B_VOL_LOOKBACK_DAYS      = 63     # 3 months daily
+# Vol targeting REMOVED after layer ablation (2026-08-05): with an 8% target
+# against a book whose natural vol is ~7.4%, the mechanism levered up rather
+# than de-risked, costing 3 Sharpe points and 2.3pp of drawdown. Ablation
+# results retained in notebooks/ablation_2026-08-05.md. Constants kept for
+# reproducing the ablation only; production path does not use them.
+STRAT_B_VOL_TARGET_DEPRECATED = 0.08
+STRAT_B_LEV_MIN_DEPRECATED    = 0.5
+STRAT_B_LEV_MAX_DEPRECATED    = 1.25
+
+# Production Strategy B: trend filter + Markov regime gate, no vol targeting.
+STRAT_B_REGIME_GATE_SCALE = 0.5   # halve gross exposure when P(high-corr) > REGIME_THRESHOLD
 STRAT_B_LEV_MIN                = 0.5
 STRAT_B_LEV_MAX                = 1.25
 STRAT_B_LEV_CAP_HIGH_REGIME    = 1.0    # halved cap when P(high-corr) > threshold

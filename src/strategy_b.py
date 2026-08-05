@@ -184,17 +184,13 @@ def build_strategy_b_weights(daily_returns: pd.DataFrame,
     # Step 1: raw per-asset weights from signal + vol budget
     W_raw = signal_scaled_raw_weights(signals_wk, vols_wk)
 
-    # Step 2: portfolio vol estimate under raw weights
-    port_vol = portfolio_vol_under_weights(daily_returns[asset_columns], W_raw)
-
-    # Step 3: aggregate leverage (vol-target + regime gate)
-    lev = aggregate_leverage_series(port_vol, regime_wk)
-
-    # Fill any leverage NaN (rare edge case in early sample) with 1.0
-    lev = lev.fillna(1.0)
-
-    # Step 4: final weights = raw * leverage
-    W_final = W_raw.mul(lev, axis=0)
+    # Production spec (post-ablation): trend filter + Markov regime gate.
+    # Vol targeting removed - see config.py and notebooks/ablation_2026-08-05.md.
+    gate = pd.Series(1.0, index=valid_idx)
+    gate[regime_wk > config.REGIME_THRESHOLD] = config.STRAT_B_REGIME_GATE_SCALE
+    W_final = W_raw.mul(gate, axis=0)
+    lev = gate                      # kept for API compatibility with the runner
+    port_vol = pd.Series(np.nan, index=valid_idx)   # no longer used in production
 
     # Cash = 1 - sum(weights). Positive = uninvested. Negative = borrowing.
     cash = 1.0 - W_final.sum(axis=1)
@@ -318,3 +314,87 @@ def run_strategy_b(weights: pd.DataFrame,
         "weights":  W,
         "label":    label,
     }
+
+# =============================================================================
+# 7. LAYER ABLATION — WHICH MECHANISM DRIVES PERFORMANCE?
+# =============================================================================
+
+def build_ablation_variants(daily_returns: pd.DataFrame,
+                            signals_full: pd.DataFrame,
+                            regime_prob: pd.Series,
+                            asset_columns: list,
+                            verbose: bool = True) -> dict:
+    """
+    Build 5 variants of Strategy B, each adding one mechanism, to attribute
+    performance to layers rather than reporting one blended number.
+
+    V0 Base        : all assets long at vol-budget size, leverage fixed 1.0
+    V1 +Trend      : trend filter on, leverage fixed 1.0
+    V2 +VolTarget  : all assets long, aggregate vol targeting on
+    V3 +Both       : trend filter AND vol targeting, no regime gate
+    V4 Full        : trend + vol targeting + regime gate (= production Strategy B)
+
+    Returns dict of {variant_name: {"weights": df, "cash": series}}
+    """
+    per_asset_vols_daily = per_asset_realized_vol(daily_returns)
+    signals_wk = signals_full[asset_columns].resample("W-FRI").last()
+    vols_wk    = per_asset_vols_daily[asset_columns].resample("W-FRI").last()
+    regime_wk  = regime_prob.resample("W-FRI").last()
+
+    valid_idx = (signals_wk.dropna(how="any").index
+                 .intersection(vols_wk.dropna(how="any").index)
+                 .intersection(regime_wk.dropna().index))
+    signals_wk = signals_wk.loc[valid_idx]
+    vols_wk    = vols_wk.loc[valid_idx]
+    regime_wk  = regime_wk.loc[valid_idx]
+
+    budget = config.STRAT_B_PER_ASSET_VOL_BUDGET
+    max_w  = config.STRAT_B_MAX_PER_ASSET_WEIGHT
+    safe_vols = vols_wk.clip(lower=0.001)
+
+    # --- Raw weights: WITH trend filter (long only when signal == +1) ---
+    W_trend = pd.DataFrame(0.0, index=valid_idx, columns=asset_columns)
+    long_mask = (signals_wk == 1)
+    W_trend[long_mask] = (budget / safe_vols)[long_mask]
+    W_trend = W_trend.clip(upper=max_w)
+
+    # --- Raw weights: NO trend filter (always long every asset) ---
+    W_notrend = (budget / safe_vols).clip(upper=max_w)
+
+    if verbose:
+        print(f"[ablation] {len(valid_idx)} weeks, {valid_idx[0].date()} to {valid_idx[-1].date()}")
+
+    variants = {}
+
+    # V0: base, no trend, no vol targeting (leverage = 1.0)
+    variants["V0_Base"] = {"weights": W_notrend, "cash": 1.0 - W_notrend.sum(axis=1)}
+
+    # V1: trend only, leverage = 1.0
+    variants["V1_Trend"] = {"weights": W_trend, "cash": 1.0 - W_trend.sum(axis=1)}
+
+    # V2: vol targeting only (no trend filter)
+    pv_notrend = portfolio_vol_under_weights(daily_returns[asset_columns], W_notrend)
+    lev_notrend_ungated = (config.STRAT_B_VOL_TARGET / pv_notrend).clip(
+        config.STRAT_B_LEV_MIN, config.STRAT_B_LEV_MAX).fillna(1.0)
+    W_v2 = W_notrend.mul(lev_notrend_ungated, axis=0)
+    variants["V2_VolTarget"] = {"weights": W_v2, "cash": 1.0 - W_v2.sum(axis=1)}
+
+    # V3: trend + vol targeting, NO regime gate
+    pv_trend = portfolio_vol_under_weights(daily_returns[asset_columns], W_trend)
+    lev_trend_ungated = (config.STRAT_B_VOL_TARGET / pv_trend).clip(
+        config.STRAT_B_LEV_MIN, config.STRAT_B_LEV_MAX).fillna(1.0)
+    W_v3 = W_trend.mul(lev_trend_ungated, axis=0)
+    variants["V3_Trend_Vol"] = {"weights": W_v3, "cash": 1.0 - W_v3.sum(axis=1)}
+
+    # V4: full stack (trend + vol targeting + regime gate) = production Strategy B
+    lev_gated = aggregate_leverage_series(pv_trend, regime_wk).fillna(1.0)
+    W_v4 = W_trend.mul(lev_gated, axis=0)
+    variants["V4_Full"] = {"weights": W_v4, "cash": 1.0 - W_v4.sum(axis=1)}
+
+    if verbose:
+        for name, v in variants.items():
+            gross = v["weights"].sum(axis=1)
+            print(f"[ablation]   {name:<15s} mean gross={gross.mean():.3f}  "
+                  f"min={gross.min():.3f}  max={gross.max():.3f}")
+
+    return variants

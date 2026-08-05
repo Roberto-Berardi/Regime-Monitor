@@ -1,6 +1,6 @@
 {
-  "generated_utc": "2026-08-05T15:49:56.727948+00:00",
-  "elapsed_seconds": 16.5,
+  "generated_utc": "2026-08-05T20:25:31.811292+00:00",
+  "elapsed_seconds": 26.9,
   "data_source": "fresh",
   "data_as_of": "2026-08-05",
   "latest_rebalance": "2026-08-07",
@@ -17,28 +17,28 @@
     "US_10Y_proxy"
   ],
   "regime_params": {
-    "high_mean": 0.0064016482821156375,
-    "low_mean": -0.4264322628198807,
-    "high_sigma2": 0.0354386925881945,
-    "low_sigma2": 0.014570102734206912,
+    "high_mean": 0.006951321598732877,
+    "low_mean": -0.4261728083753372,
+    "high_sigma2": 0.03554702673669948,
+    "low_sigma2": 0.014581581545298374,
     "pct_high": 37.16551040634292,
-    "loglik": 398.14293171749557
+    "loglik": 397.46280630335525
   },
-  "p_high_latest": 0.9999996943807214,
+  "p_high_latest": 0.9999999940457327,
   "active_cap_latest": 2.0,
   "strategyb_gate_latest": 0.5,
-  "strategyb_gross_latest": 0.3671613267391446,
+  "strategyb_gross_latest": 0.36714346823730515,
   "lookahead": {
     "Tilted": {
-      "base_sharpe": 0.9745035717756224,
-      "lagged_sharpe": 0.8439031490288172,
-      "degradation": 0.13401738744665748,
+      "base_sharpe": 0.8648354452829512,
+      "lagged_sharpe": 0.7634758317124601,
+      "degradation": 0.11720103994734962,
       "verdict": "SAFE"
     },
     "StrategyB": {
-      "base_sharpe": 0.9752785540312683,
-      "lagged_sharpe": 0.7574541419904105,
-      "degradation": 0.22334584426212467,
+      "base_sharpe": 0.97533840553033,
+      "lagged_sharpe": 0.7574949225491078,
+      "degradation": 0.2233516918292294,
       "verdict": "SAFE"
     }
   },
@@ -65,5 +65,18 @@
     "US_HY": "EWMA-fallback",
     "US_2Y_proxy": "GARCH-t",
     "US_10Y_proxy": "GARCH-t"
-  }
+  },
+  "narrative": {
+    "partial_week": true,
+    "sessions": 3,
+    "period_label": "week to date (3 of 5 sessions)",
+    "regime": "The filtered probability of the high-correlation regime is 1.00. Unchanged from last week. At this level stock-bond diversification is impaired, so the tactical tilt runs at half strength (\u00b12pp).",
+    "moves": "Over the week to date (3 of 5 sessions): gold led at +6.4%; WTI crude lagged at -11.4%. Gold's 6.4% move was in the 98th percentile of its own weekly moves since 2007. Also unusually large for their own history: WTI crude, S&P 500.",
+    "signals": "One trend signal changed state: WTI crude turned neutral (from positive). A signal requires 12-1 month momentum and the 200-day moving average to agree; disagreement produces no position.",
+    "positioning": "Largest weight changes: WTI crude -1.8pp to 3.7%; US 2Y +0.5pp to 28.0%.",
+    "macro": "Most recent tracked releases: Initial Jobless Claims 197,000 vs 187,000 prior (2026-07-25); PCE Price Index -0.10% m/m (2026-06-01); Initial Jobless Claims 187,000 vs 208,000 prior (2026-07-18).",
+    "sentiment": "Economic news sentiment sits at the 54th percentile of its history since 1980, improving over the past month (+0.030 vs -0.033 trailing 12M). Reference indicator only \u2014 not a portfolio input.",
+    "week_end": "2026-08-07"
+  },
+  "n_releases": 9
 }

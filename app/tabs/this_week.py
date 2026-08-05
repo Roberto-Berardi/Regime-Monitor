@@ -13,10 +13,27 @@ LABELS = {
 }
 
 
-def _synthetic_prices(returns_daily: pd.DataFrame) -> pd.DataFrame:
-    """Cumulative-return series - uniform treatment for price assets and bond
-    proxies, matching how build_signal_panel_full computes bond momentum."""
-    return (1.0 + returns_daily.fillna(0.0)).cumprod()
+def _signal_prices(panel: pd.DataFrame, returns_daily: pd.DataFrame,
+                   assets: list) -> pd.DataFrame:
+    """
+    Reproduce EXACTLY the price basis src.momentum.build_signal_panel_full uses:
+      - price assets  -> raw forward-filled prices from the panel
+      - bond proxies  -> cumulative-return synthetic prices
+
+    This matters. The returns series is winsorized at +/-25%, so a cumulative
+    return series diverges sharply from raw prices for assets with extreme
+    days (WTI, April 2020). Computing the displayed momentum on a different
+    basis than the signal makes the table contradict itself.
+    """
+    cols = {}
+    for a in assets:
+        if a.endswith("_proxy"):
+            cols[a] = (1.0 + returns_daily[a].fillna(0.0)).cumprod()
+        elif a in panel.columns:
+            cols[a] = panel[a].ffill()
+    # panel and returns_daily sit on different indices (raw daily vs business-day),
+    # so the union introduces gaps; ffill before any rolling window is applied.
+    return pd.DataFrame(cols).reindex(columns=assets).ffill()
 
 
 def render(D: dict, M: dict):
@@ -57,7 +74,7 @@ def render(D: dict, M: dict):
     st.markdown("---")
 
     # --------------------------------------------------------- signal panel --
-    prices = _synthetic_prices(rets[assets])
+    prices = _signal_prices(D["panel"], rets, assets)
     mom_12_1 = (prices.shift(21) / prices.shift(252) - 1.0).iloc[-1]
     ret_1m = (prices.iloc[-1] / prices.shift(21).iloc[-1] - 1.0)
     ret_3m = (prices.iloc[-1] / prices.shift(63).iloc[-1] - 1.0)

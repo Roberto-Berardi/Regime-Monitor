@@ -12,8 +12,8 @@ this file. Do not hardcode constants elsewhere.
 # Bonds are represented via yields (from FRED) later converted to return
 # proxies via modified duration in src/returns.py.
 ASSETS = {
-    "SP500":       "^GSPC",     # S&P 500 index
-    "EuroStoxx50": "^STOXX50E", # Euro Stoxx 50
+    "SP500":        "SPY",      # was ^GSPC (price index) — SPY includes dividends
+    "EuroStoxx50":  "FEZ",      # was ^STOXX50E (price index) — FEZ is USD, includes dividends
     "MSCI_EM":     "EEM",       # iShares MSCI EM ETF (proxy)
     "Gold":        "GC=F",      # Gold futures
     "Oil_WTI":     "CL=F",      # WTI crude oil futures

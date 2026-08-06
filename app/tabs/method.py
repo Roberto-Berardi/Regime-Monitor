@@ -90,7 +90,7 @@ healthy: it confirms the signal has genuine timing content.</span>
             t.style.format("{:.1%}")
              .map(lambda v: f"color:{RED}" if isinstance(v, float) and v < -0.10 else "",
                   subset=[c for c in t.columns if "DD" in c]),
-            use_container_width=True,
+            width="stretch",
         )
 
         dd_t = t.get("ERC+tilt max DD")
@@ -132,7 +132,7 @@ healthy: it confirms the signal has genuine timing content.</span>
                 margin=dict(l=0, r=10, t=20, b=30),
                 xaxis=dict(title="excess Sharpe, 95% CI"), yaxis=dict(title=None),
                 font=dict(size=11))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
     with c2:
         st.markdown(f"""

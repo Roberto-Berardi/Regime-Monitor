@@ -116,7 +116,7 @@ card(m1, "Regime P(high-corr)", f"{p_high:.2f}",
      "diversification impaired" if p_high > 0.70 else "diversifying")
 
 cap = M["active_cap_latest"]
-card(m2, "Strategy A tilt cap", f"±{cap:.0f}pp",
+card(m2, "Active tilt cap", f"±{cap:.0f}pp",
      "gated" if cap < 4 else "full")
 
 _vol = D.get("vol_percentiles")

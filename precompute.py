@@ -31,6 +31,8 @@ from src.momentum import build_signal_panel, build_signal_panel_full
 from src.tilt import build_tilted_weights
 from src.strategy_b import build_strategy_b_weights, run_strategy_b, build_ablation_variants
 from src.macro import get_recent_releases
+from src.risk import (latest_covariance, risk_contributions, risk_summary,
+                      trailing_performance)
 from src.narrative import build_narrative, weekly_moves
 from src.backtest import (daily_log_to_weekly_simple, run_strategy,
                           build_60_40_weights, build_equal_weight,
@@ -236,6 +238,37 @@ def main():
         rows.append(row)
     _save(pd.DataFrame(rows).set_index("episode"), "crisis_episodes")
 
+    # ---- 8b. Ex-ante risk analytics ----------------------------------------
+    print("\n[8b] ex-ante risk")
+    cov_now = latest_covariance(fits, dcc, cols)
+    _save(cov_now, "covariance_latest")
+
+    rc_tilt = risk_contributions(tilt["weights"].iloc[-1], cov_now)
+    rc_erc  = risk_contributions(tilt["erc_weekly"].iloc[-1], cov_now)
+    _save(rc_tilt, "risk_contrib_tilted")
+    _save(rc_erc,  "risk_contrib_erc")
+
+    # Contributions measured with the covariance AS AT the rebalance date.
+    # At that moment ERC is exact (1/N each); the drift visible in the
+    # current-covariance version is what motivates monthly rebalancing.
+    rebal_date = erc_hist.index[-1]
+    dcc_dates = pd.DatetimeIndex(dcc["dates"])
+    d_at = dcc_dates[dcc_dates <= rebal_date][-1]
+    pos_at = dcc_dates.get_loc(d_at)
+    R_at = pd.DataFrame(dcc["R"][pos_at], index=dcc["assets"],
+                        columns=dcc["assets"]).loc[cols, cols]
+    # NB: pull sigma BY DATE - the returns index and the DCC common-sample
+    # index differ in length, so positional lookup silently misaligns them.
+    sig_at = np.array([float(fits[a]["sigma"].loc[d_at]) for a in cols])
+    cov_at = pd.DataFrame(np.diag(sig_at) @ R_at.values @ np.diag(sig_at),
+                          index=cols, columns=cols)
+    _save(risk_contributions(erc_hist.loc[rebal_date, cols], cov_at),
+          "risk_contrib_erc_at_rebalance")
+
+    risk_now = risk_summary(tilt["weights"].iloc[-1], cov_now)
+    trail_12m = trailing_performance(runs["Tilted"]["net"], rf, weeks=52)
+    trail_12m_ew = trailing_performance(runs["EW"]["net"], rf, weeks=52)
+
     # ---- 9. Market-conditions artifacts ------------------------------------
     print("\n[9/10] market conditions")
 
@@ -316,6 +349,11 @@ def main():
         },
         "dnsi": dnsi_stats,
         "garch_methods": {a: f["method"] for a, f in fits.items()},
+        "risk_now": {k: (float(v) if isinstance(v, (int, float, np.floating)) else v)
+                     for k, v in risk_now.items()},
+        "trailing_12m":    {k: float(v) for k, v in trail_12m.items()},
+        "trailing_12m_ew": {k: float(v) for k, v in trail_12m_ew.items()},
+        "rebalance_date":  str(rebal_date.date()),
         "narrative": narrative,
         "n_releases": int(len(releases)) if not releases.empty else 0,
     }

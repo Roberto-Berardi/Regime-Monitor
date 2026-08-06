@@ -53,7 +53,7 @@ def render(D: dict, M: dict):
                        range=[0, 108], ticksuffix=""),
             yaxis=dict(title=None), font=dict(size=11), showlegend=False,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         hot = v[v["pctile"] >= 85]
         cold = v[v["pctile"] <= 15]
@@ -105,7 +105,7 @@ def render(D: dict, M: dict):
                 font=dict(size=10),
                 xaxis=dict(tickangle=-45), yaxis=dict(autorange="reversed"),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             st.caption(
                 "DCC(1,1) conditional correlations as of the latest observation. "
                 "Navy = positive, amber = negative. These feed the ERC optimiser; "
@@ -166,7 +166,7 @@ def render(D: dict, M: dict):
                             font=dict(size=10)),
                 font=dict(size=11), hovermode="x unified",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             st.caption(
                 "Amber shading marks weeks the model assigns to the "
                 "high-correlation regime (P > 0.70), when the tactical tilt is "
@@ -208,7 +208,7 @@ def render(D: dict, M: dict):
                         font=dict(size=10)),
             font=dict(size=11),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         d = M.get("dnsi", {})
         st.caption(
             f"San Francisco Fed Daily News Sentiment Index, lexical analysis of 24 "

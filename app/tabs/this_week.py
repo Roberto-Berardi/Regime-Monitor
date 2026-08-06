@@ -73,6 +73,25 @@ def render(D: dict, M: dict):
 
     st.markdown("---")
 
+    # ------------------------------------------------------------ risk strip -
+    rn = M.get("risk_now", {})
+    if rn:
+        st.markdown("### Risk being run right now")
+        r1, r2, r3, r4, r5 = st.columns(5)
+        r1.metric("Ex-ante vol", f"{rn['vol_ann']*100:.1f}%")
+        r2.metric("Duration", f"{rn['duration_years']:.1f} yrs")
+        r3.metric("Equity beta", f"{rn['equity_beta']:.2f}")
+        r4.metric("1w 95% ES", f"{rn['es95_weekly']*100:.2f}%")
+        r5.metric("Largest position", f"{rn['largest_weight']*100:.0f}%")
+        st.caption(
+            "Forward-looking, from the current GARCH/DCC covariance - not "
+            "realised history. Duration counts the rate proxies only, so it "
+            "understates true rate sensitivity: the credit ETFs carry spread "
+            "duration this figure ignores. Expected shortfall assumes normal "
+            "innovations; the fitted residuals are Student-t with 4-10 degrees "
+            "of freedom, so treat it as a floor rather than a worst case."
+        )
+
     # --------------------------------------------------------- signal panel --
     prices = _signal_prices(D["panel"], rets, assets)
     mom_12_1 = (prices.shift(21) / prices.shift(252) - 1.0).iloc[-1]
@@ -122,7 +141,7 @@ def render(D: dict, M: dict):
                            (f"color:{AMBER};font-weight:600" if v == "DOWN" else
                             f"color:{GREY}")),
                 subset=["Signal"]),
-        use_container_width=True,
+        width="stretch",
         height=(len(tbl) + 1) * 35 + 3,
     )
 
@@ -149,7 +168,7 @@ def render(D: dict, M: dict):
             legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
             font=dict(size=11),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         gated = M["active_cap_latest"] < 4
         st.caption(
             f"Equal Risk Contribution anchor, rebalanced monthly, then tilted "
@@ -180,7 +199,7 @@ def render(D: dict, M: dict):
             xaxis=dict(tickformat=".0%", title=None), yaxis=dict(title=None),
             font=dict(size=11), showlegend=False,
         )
-        st.plotly_chart(gfig, use_container_width=True)
+        st.plotly_chart(gfig, width="stretch")
         st.caption(
             "Capital weights. The ERC anchor equalises RISK contribution across "
             "the nine assets, which is why low-volatility rates carry the largest "
